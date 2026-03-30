@@ -1198,38 +1198,48 @@ def transfer_balance(sender_id, receiver_id, amount):
 
 PREMIUM_STICKER_PACK = "Udif7rr7_by_fStikBot"
 
+# Bot API HTML format for premium custom emoji (<tg-emoji> works for bots natively)
+E_MAGIC_TG    = "<tg-emoji emoji-id='5352870513267973607'>✨</tg-emoji>"
+E_DEVIL_TG    = "<tg-emoji emoji-id='5352542184493031170'>😈</tg-emoji>"
+E_CROWN_TG    = "<tg-emoji emoji-id='6307750079423845494'>👑</tg-emoji>"
+E_DIAMOND_TG  = "<tg-emoji emoji-id='4929195195225867512'>💎</tg-emoji>"
+E_BUTTERFLY_TG= "<tg-emoji emoji-id='6307643744623531146'>🦋</tg-emoji>"
+E_HEART_TG    = "<tg-emoji emoji-id='6123125485661591081'>🩷</tg-emoji>"
+
+# Cache sticker file_ids from the premium pack (fetched once via Bot API)
+_cached_sticker_ids = []
+
+def _get_random_sticker_file_id():
+    """Fetch sticker set once via Bot API and return a random sticker file_id"""
+    global _cached_sticker_ids
+    if not _cached_sticker_ids:
+        try:
+            sticker_set = bot.get_sticker_set(PREMIUM_STICKER_PACK)
+            _cached_sticker_ids = [s.file_id for s in sticker_set.stickers]
+            logger.info(f"✅ Loaded {len(_cached_sticker_ids)} stickers from {PREMIUM_STICKER_PACK}")
+        except Exception as e:
+            logger.error(f"Failed to fetch sticker set: {e}")
+    if _cached_sticker_ids:
+        return random.choice(_cached_sticker_ids)
+    return None
+
 def run_premium_intro(user_id):
-    """Send animated intro messages using premium Pyrogram account for real custom emoji + random sticker"""
-    async def _do():
-        async with Client(
-            "prem_intro",
-            api_id=GLOBAL_API_ID,
-            api_hash=GLOBAL_API_HASH,
-            session_string=PREMIUM_SESSION
-        ) as app:
-            m1 = await app.send_message(user_id, f"{E_MAGIC} Hlo Sir......", parse_mode=enums.ParseMode.HTML)
-            await asyncio.sleep(1)
-            await app.delete_messages(user_id, m1.id)
-            m2 = await app.send_message(user_id, f"{E_DEVIL} Ping Pong........", parse_mode=enums.ParseMode.HTML)
-            await asyncio.sleep(1)
-            await app.delete_messages(user_id, m2.id)
-            m3 = await app.send_message(user_id, f"{E_CROWN} Gms OP......", parse_mode=enums.ParseMode.HTML)
-            await asyncio.sleep(1)
-            await app.delete_messages(user_id, m3.id)
-
-            # Send a random sticker from the premium sticker pack
-            try:
-                sticker_set = await app.get_sticker_set(PREMIUM_STICKER_PACK)
-                if sticker_set and sticker_set.stickers:
-                    chosen = random.choice(sticker_set.stickers)
-                    await app.send_sticker(user_id, chosen.file_id)
-            except Exception as sticker_err:
-                logger.error(f"Premium sticker send error: {sticker_err}")
-
+    """Send animated intro with premium custom emoji + random sticker via Bot API"""
     try:
-        new_loop = asyncio.new_event_loop()
-        new_loop.run_until_complete(_do())
-        new_loop.close()
+        m1 = bot.send_message(user_id, f"{E_MAGIC_TG} Hlo Sir......", parse_mode='HTML')
+        time.sleep(1)
+        bot.delete_message(user_id, m1.message_id)
+        m2 = bot.send_message(user_id, f"{E_DEVIL_TG} Ping Pong........", parse_mode='HTML')
+        time.sleep(1)
+        bot.delete_message(user_id, m2.message_id)
+        m3 = bot.send_message(user_id, f"{E_CROWN_TG} Gms OP......", parse_mode='HTML')
+        time.sleep(1)
+        bot.delete_message(user_id, m3.message_id)
+
+        # Send a random sticker from the premium sticker pack
+        sticker_file_id = _get_random_sticker_file_id()
+        if sticker_file_id:
+            bot.send_sticker(user_id, sticker_file_id)
     except Exception as e:
         logger.error(f"Premium intro error: {e}")
         try:
