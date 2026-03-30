@@ -49,6 +49,18 @@ MONGO_URL = os.getenv('MONGO_URL', 'mongodb+srv://ragini19854_db_user:<db_passwo
 API_ID = int(os.getenv('API_ID', '36326629'))
 API_HASH = os.getenv('API_HASH', '823e6e8c081fe363e6d739b39dc19e07')
 
+# Multiple owners support (up to 5, comma-separated in OWNER_IDS env var)
+# e.g. OWNER_IDS=123456789,987654321,111222333
+_raw_owner_ids = os.getenv('OWNER_IDS', '')
+OWNER_IDS = [int(x.strip()) for x in _raw_owner_ids.split(',') if x.strip().isdigit()]
+if ADMIN_ID not in OWNER_IDS:
+    OWNER_IDS.insert(0, ADMIN_ID)
+OWNER_IDS = OWNER_IDS[:5]  # Max 5 owners
+
+# Recharge QR and UPI settings (configurable via env vars)
+QR_IMAGE_URL = os.getenv('QR_IMAGE_URL', 'https://files.catbox.moe/x6666i.jpg')
+UPI_ID = os.getenv('UPI_ID', 'adibhai@fam')
+
 # MUST JOIN CHANNELS - TWO CHANNELS
 MUST_JOIN_CHANNEL_1 = "@BEST_OTP_GROUP_SUPPORT"
 MUST_JOIN_CHANNEL_2 = "@GMS_COMEBACK_SOON"
@@ -73,7 +85,7 @@ bot = telebot.TeleBot(BOT_TOKEN)
 
 # MongoDB Setup
 try:
-    client = MongoClient(MONGO_URL)
+    client = MongoClient(MONGO_URL, tlsAllowInvalidCertificates=True)
     db = client['otp_bot']
     users_col = db['users']
     accounts_col = db['accounts']
@@ -158,15 +170,24 @@ def init_admin():
         
         admin_count = admins_col.count_documents({})
         if admin_count == 0:
-            # Add the main admin
-            admin_data = {
-                "user_id": ADMIN_ID,
-                "added_by": "SYSTEM",
-                "added_at": datetime.utcnow(),
-                "is_super_admin": True
-            }
-            admins_col.insert_one(admin_data)
-            logger.info(f"✅ Main admin {ADMIN_ID} added to database")
+            # Add all owners from OWNER_IDS as super admins
+            for owner_id in OWNER_IDS:
+                admin_data = {
+                    "user_id": owner_id,
+                    "added_by": "SYSTEM",
+                    "added_at": datetime.utcnow(),
+                    "is_super_admin": True
+                }
+                admins_col.update_one({"user_id": owner_id}, {"$setOnInsert": admin_data}, upsert=True)
+                logger.info(f"✅ Owner {owner_id} added to database")
+        else:
+            # Ensure all owners are always in the admins collection
+            for owner_id in OWNER_IDS:
+                admins_col.update_one(
+                    {"user_id": owner_id},
+                    {"$set": {"is_super_admin": True, "added_by": "SYSTEM"}},
+                    upsert=True
+                )
     except Exception as e:
         logger.error(f"❌ Failed to initialize admin: {e}")
 
@@ -179,13 +200,13 @@ init_admin()
 def get_admin_info(user_id):
     """Get admin info by user ID"""
     try:
-        # Check if it's main admin
-        if str(user_id) == str(ADMIN_ID):
+        # Check if it's one of the owners
+        if int(user_id) in OWNER_IDS:
             user = users_col.find_one({"user_id": user_id})
             return {
                 "user_id": user_id,
                 "is_super_admin": True,
-                "name": user.get("name", "Main Admin") if user else "Main Admin"
+                "name": user.get("name", "Owner") if user else "Owner"
             }
         
         # Check in admins collection
@@ -202,8 +223,8 @@ def get_admin_info(user_id):
 def is_admin(user_id):
     """Check if user is an admin"""
     try:
-        # Check if it's the main admin
-        if str(user_id) == str(ADMIN_ID):
+        # Check if it's one of the owners
+        if int(user_id) in OWNER_IDS:
             return True
         
         # Check in admins collection
@@ -213,8 +234,11 @@ def is_admin(user_id):
         return False
 
 def is_super_admin(user_id):
-    """Check if user is the main super admin"""
-    return str(user_id) == str(ADMIN_ID)
+    """Check if user is one of the owners (super admins)"""
+    try:
+        return int(user_id) in OWNER_IDS
+    except:
+        return str(user_id) == str(ADMIN_ID)
 
 def add_admin(user_id, added_by):
     """Add a new admin (max 5 admins)"""
@@ -254,9 +278,9 @@ def remove_admin(user_id, removed_by):
         if not admin:
             return False, "User is not an admin"
         
-        # Check if trying to remove super admin
-        if str(user_id) == str(ADMIN_ID):
-            return False, "Cannot remove main admin"
+        # Check if trying to remove an owner
+        if int(user_id) in OWNER_IDS:
+            return False, "Cannot remove an owner"
         
         # Remove admin
         result = admins_col.delete_one({"user_id": user_id})
@@ -1049,47 +1073,47 @@ def clean_ui_and_send_menu(chat_id, user_id, text=None, markup=None):
         
         # Main menu caption with expandable blockquotes
         caption = (
-            "🥂 <b>Welcome To Otp Bot By Adi</b> 🥂\n"
+            "🌟 <b>Welcome To GMS OTP Bot</b> 🌟\n"
             "<blockquote expandable>\n"
-            "- Automatic OTPs 📍\n"
-            "- Easy to Use 🥂🥂\n"
-            "- 24/7 Support 👨‍🔧\n"
-            "- Instant Payment Approvals 🧾\n"
+            "🟢 Automatic OTPs — Instant & Fast\n"
+            "🔵 Easy to Use — Simple Interface\n"
+            "🟡 24/7 Support — Always Here\n"
+            "🟣 Instant Payment Approvals\n"
             "</blockquote>\n"
             "<blockquote expandable>\n"
-            "🚀 <b>How to use Bot :</b>\n"
-            "1️⃣ Recharge\n"
+            "🚀 <b>How to use GMS Bot:</b>\n"
+            "1️⃣ Add Funds to Wallet\n"
             "2️⃣ Select Country\n"
             "3️⃣ Buy Account\n"
-            "4️⃣ Get Number & Login through Telegram / Telegram X / Tarbotel\n"
-            "5️⃣ Receive OTP & You're Done ✅\n"
+            "4️⃣ Login via Telegram / Telegram X / Tarbotel\n"
+            "5️⃣ Receive OTP & Done ✅\n"
             "</blockquote>\n"
-            "🚀 <b>Enjoy Fast Account Buying Experience!</b>"
+            "⚡ <b>GMS — Fast. Reliable. Always On!</b>"
         )
         
         if markup is None:
             markup = InlineKeyboardMarkup(row_width=2)
             # Row 1: 2 buttons
             markup.add(
-                InlineKeyboardButton("🛒 Buy Account", callback_data="buy_account"),
-                InlineKeyboardButton("💰 Balance", callback_data="balance")
+                InlineKeyboardButton("🛍️ Buy Account", callback_data="buy_account", style="success"),
+                InlineKeyboardButton("💎 My Balance", callback_data="balance", style="primary")
             )
             # Row 2: 1 button
             markup.add(
-                InlineKeyboardButton("💳 Recharge", callback_data="recharge")
+                InlineKeyboardButton("💸 Add Funds", callback_data="recharge", style="success")
             )
             # Row 3: 2 buttons
             markup.add(
-                InlineKeyboardButton("👥 Refer Friends", callback_data="refer_friends"),
-                InlineKeyboardButton("🎁 Redeem", callback_data="redeem_coupon")
+                InlineKeyboardButton("🤝 Refer & Earn", callback_data="refer_friends", style="primary"),
+                InlineKeyboardButton("🎁 Redeem Coupon", callback_data="redeem_coupon", style="danger")
             )
             # Row 4: 1 button
             markup.add(
-                InlineKeyboardButton("🛠️ Support", callback_data="support")
+                InlineKeyboardButton("🆘 Support", callback_data="support", style="primary")
             )
             # Row 5: 1 button (only for admin)
             if is_admin(user_id):
-                markup.add(InlineKeyboardButton("👑 Admin Panel", callback_data="admin_panel"))
+                markup.add(InlineKeyboardButton("⚡ Admin Panel", callback_data="admin_panel", style="danger"))
         
         # Send new message (TEXT ONLY - NO PHOTO)
         sent_msg = bot.send_message(
@@ -2536,7 +2560,7 @@ def show_bulk_summary(user_id):
     summary += f"\n⏰ Completed at: {datetime.utcnow().strftime('%H:%M:%S')}"
     
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("🏠 Admin Panel", callback_data="admin_panel"))
+    markup.add(InlineKeyboardButton("⚡ Admin Panel", callback_data="admin_panel"))
     
     edit_or_resend(
         state["chat_id"],
@@ -2747,7 +2771,7 @@ def show_coupon_management(chat_id, message_id=None):
     )
     markup.add(
         InlineKeyboardButton("📊 Coupon Status", callback_data="admin_coupon_status"),
-        InlineKeyboardButton("⬅️ Back to Admin", callback_data="admin_panel")
+        InlineKeyboardButton("🔙 Back to Admin", callback_data="admin_panel")
     )
     
     if message_id:
@@ -3085,9 +3109,9 @@ def show_recharge_methods(chat_id, message_id, user_id):
     
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
-        InlineKeyboardButton("📱 UPI Payment", callback_data="recharge_upi")
+        InlineKeyboardButton("💳 UPI Payment", callback_data="recharge_upi", style="success")
     )
-    markup.add(InlineKeyboardButton("⬅️ Back", callback_data="back_to_menu"))
+    markup.add(InlineKeyboardButton("🔙 Back", callback_data="back_to_menu", style="primary"))
     
     edit_or_resend(
         chat_id,
@@ -3114,7 +3138,7 @@ def process_recharge_amount(msg):
         caption = f"""<blockquote>💳 <b>UPI Payment Details</b> 
 
 💰 Amount: {format_currency(amount)}
-📱 UPI ID: adibhai@fam
+📱 UPI ID: {UPI_ID}
 
 📋 Instructions:
 1. Scan QR code OR send {format_currency(amount)} to above UPI
@@ -3124,7 +3148,7 @@ def process_recharge_amount(msg):
 </blockquote>"""
         
         markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton("💰 Deposited ✅", callback_data="upi_deposited"))
+        markup.add(InlineKeyboardButton("✅ I've Paid — Confirm", callback_data="upi_deposited", style="success"))
         
         upi_payment_states[user_id] = {
             "amount": amount,
@@ -3133,7 +3157,7 @@ def process_recharge_amount(msg):
         
         bot.send_photo(
             msg.chat.id,
-            "https://files.catbox.moe/x6666i.jpg",
+            QR_IMAGE_URL,
             caption=caption,
             parse_mode="HTML",
             reply_markup=markup
@@ -3221,8 +3245,8 @@ def handle_screenshot_input(msg):
 
         markup = InlineKeyboardMarkup(row_width=2)
         markup.add(
-            InlineKeyboardButton("✅ Approve", callback_data=f"approve_rech|{req_id}"),
-            InlineKeyboardButton("❌ Reject", callback_data=f"cancel_rech|{req_id}")
+            InlineKeyboardButton("✅ Approve", callback_data=f"approve_rech|{req_id}", style="success"),
+            InlineKeyboardButton("❌ Reject", callback_data=f"cancel_rech|{req_id}", style="danger")
         )
         
         # Send to all admins
@@ -3767,8 +3791,8 @@ def show_referral_info(user_id, chat_id):
     message += f"Start sharing and earning today! 🎉"
     
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("📤 Share Link", url=f"https://t.me/share/url?url={referral_link}&text=Join%20this%20awesome%20OTP%20bot%20to%20buy%20Telegram%20accounts!"))
-    markup.add(InlineKeyboardButton("⬅️ Back", callback_data="back_to_menu"))
+    markup.add(InlineKeyboardButton("📤 Share Link", url=f"https://t.me/share/url?url={referral_link}&text=Join%20GMS%20OTP%20Bot%20%E2%80%94%20Fast%2C%20Reliable%20Telegram%20Account%20Buying!", style="success"))
+    markup.add(InlineKeyboardButton("🔙 Back", callback_data="back_to_menu", style="primary"))
     
     sent_msg = bot.send_message(chat_id, message, parse_mode="Markdown", reply_markup=markup)
     user_last_message[user_id] = sent_msg.message_id
@@ -3793,38 +3817,38 @@ def show_admin_panel(chat_id):
     total_admins = get_admin_count()
     
     text = (
-        f"👑 **Admin Panel**\n\n"
+        f"⚡ **GMS Admin Panel**\n\n"
         f"📊 **Statistics:**\n"
-        f"• Total Accounts: {total_accounts}\n"
-        f"• Active Accounts: {active_accounts}\n"
-        f"• Total Users: {total_users}\n"
-        f"• Total Orders: {total_orders}\n"
-        f"• Banned Users: {banned_users}\n"
-        f"• Active Countries: {active_countries}\n"
-        f"• Total Admins: {total_admins}/6\n\n"
+        f"• 📦 Total Accounts: {total_accounts}\n"
+        f"• ✅ Active Accounts: {active_accounts}\n"
+        f"• 👥 Total Users: {total_users}\n"
+        f"• 🛒 Total Orders: {total_orders}\n"
+        f"• 🔒 Banned Users: {banned_users}\n"
+        f"• 🌍 Active Countries: {active_countries}\n"
+        f"• 👑 Total Admins: {total_admins}/6\n\n"
         f"🛠️ **Management Tools:**"
     )
     
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
-        InlineKeyboardButton("➕ Add Account", callback_data="add_account"),
-        InlineKeyboardButton("📢 Broadcast", callback_data="broadcast_menu")
+        InlineKeyboardButton("📲 Add Account", callback_data="add_account", style="success"),
+        InlineKeyboardButton("📣 Broadcast", callback_data="broadcast_menu", style="primary")
     )
     markup.add(
-        InlineKeyboardButton("💸 Refund", callback_data="refund_start"),
-        InlineKeyboardButton("📊 Ranking", callback_data="ranking")
+        InlineKeyboardButton("🔄 Refund", callback_data="refund_start", style="primary"),
+        InlineKeyboardButton("🏆 Ranking", callback_data="ranking", style="primary")
     )
     markup.add(
-        InlineKeyboardButton("💬 Message User", callback_data="message_user"),
-        InlineKeyboardButton("💳 Deduct Balance", callback_data="admin_deduct_start")
+        InlineKeyboardButton("📨 Message User", callback_data="message_user", style="primary"),
+        InlineKeyboardButton("➖ Deduct Balance", callback_data="admin_deduct_start", style="danger")
     )
     markup.add(
-        InlineKeyboardButton("🚫 Ban User", callback_data="ban_user"),
-        InlineKeyboardButton("✅ Unban User", callback_data="unban_user")
+        InlineKeyboardButton("🔒 Ban User", callback_data="ban_user", style="danger"),
+        InlineKeyboardButton("🔓 Unban User", callback_data="unban_user", style="success")
     )
     markup.add(
-        InlineKeyboardButton("🌍 Manage Countries", callback_data="manage_countries"),
-        InlineKeyboardButton("🎟 Coupon Management", callback_data="admin_coupon_menu")
+        InlineKeyboardButton("🗺️ Countries", callback_data="manage_countries", style="primary"),
+        InlineKeyboardButton("🎫 Coupons", callback_data="admin_coupon_menu", style="success")
     )
     
     # Show admin list for main admin
@@ -3857,13 +3881,13 @@ def show_country_management(chat_id):
     
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
-        InlineKeyboardButton("➕ Add Country", callback_data="add_country"),
-        InlineKeyboardButton("✏️ Edit Price", callback_data="edit_price")
+        InlineKeyboardButton("🌐 Add Country", callback_data="add_country", style="success"),
+        InlineKeyboardButton("💱 Edit Price", callback_data="edit_price", style="primary")
     )
     markup.add(
-        InlineKeyboardButton("➖ Remove Country", callback_data="remove_country")
+        InlineKeyboardButton("🗑️ Remove Country", callback_data="remove_country", style="danger")
     )
-    markup.add(InlineKeyboardButton("⬅️ Back to Admin", callback_data="admin_panel"))
+    markup.add(InlineKeyboardButton("🔙 Back to Admin", callback_data="admin_panel", style="primary"))
     
     sent_msg = bot.send_message(chat_id, text, reply_markup=markup, parse_mode="Markdown")
     user_last_message[chat_id] = sent_msg.message_id
