@@ -32,7 +32,7 @@ telebot.types.Story.de_json = _disable_story
 from pymongo import MongoClient
 import os
 import requests
-from pyrogram import Client
+from pyrogram import Client, enums
 from pyrogram.errors import (
     ApiIdInvalid, PhoneNumberInvalid, PhoneCodeInvalid,
     PhoneCodeExpired, SessionPasswordNeeded, PasswordHashInvalid,
@@ -73,6 +73,17 @@ REFERRAL_COMMISSION = 1.5
 # Global API Credentials for Pyrogram Login
 GLOBAL_API_ID = 36326629
 GLOBAL_API_HASH = "823e6e8c081fe363e6d739b39dc19e07"
+
+# Premium account session string (for sending premium custom emoji)
+PREMIUM_SESSION = os.getenv('PREMIUM_SESSION', 'AgFwyZ4APpDriQpvyiFCN92WeGmFX0zjUWa8yWcj0LoVvMoWH7VOMxDnO4v71-UntQjYsHdv-tKTsEOJBKzrN9WWE6KTjHBZTSbE-ePcg5vboI4iCrmVyORK1okb1QsiUVbJpqcddNT07MYLI4e96XAvjmBtwu94m0gQ14iuvPgmzBkSrutjbbdtvGbNoYbwAAgEoNMqNLaKk4xsezvy0Ro9ObtTh6GwlPzrf4FKpPr5bXt7nGK-lsRdKjb0avvEDW_HEaZTqZa5EAClmzYFpLwBkB4PzSbnmXhgz_sZAmqJR4JSqlvodxqNag_KnphQKjKLrMPsYpFD8-q0Z6i_oCvC4JvAeAAAAAHqW472AA')
+
+# Premium custom emoji constants (Pyrogram HTML format)
+E_DEVIL    = "<emoji id='5352542184493031170'>😈</emoji>"
+E_CROWN    = "<emoji id='6307750079423845494'>👑</emoji>"
+E_DIAMOND  = "<emoji id='4929195195225867512'>💎</emoji>"
+E_BUTTERFLY= "<emoji id='6307643744623531146'>🦋</emoji>"
+E_MAGIC    = "<emoji id='5352870513267973607'>✨</emoji>"
+E_HEART    = "<emoji id='6123125485661591081'>🩷</emoji>"
 
 # ---------------------------------------------------------------------
 # INIT
@@ -1182,6 +1193,48 @@ def transfer_balance(sender_id, receiver_id, amount):
         return False, f"Error: {str(e)}"
 
 # ---------------------------------------------------------------------
+# PREMIUM INTRO FUNCTION
+# ---------------------------------------------------------------------
+
+def run_premium_intro(user_id):
+    """Send animated intro messages using premium Pyrogram account for real custom emoji"""
+    async def _do():
+        async with Client(
+            "prem_intro",
+            api_id=GLOBAL_API_ID,
+            api_hash=GLOBAL_API_HASH,
+            session_string=PREMIUM_SESSION
+        ) as app:
+            m1 = await app.send_message(user_id, f"{E_MAGIC} Hlo Sir......", parse_mode=enums.ParseMode.HTML)
+            await asyncio.sleep(1)
+            await app.delete_messages(user_id, m1.id)
+            m2 = await app.send_message(user_id, f"{E_DEVIL} Ping Pong........", parse_mode=enums.ParseMode.HTML)
+            await asyncio.sleep(1)
+            await app.delete_messages(user_id, m2.id)
+            m3 = await app.send_message(user_id, f"{E_CROWN} Gms OP......", parse_mode=enums.ParseMode.HTML)
+            await asyncio.sleep(1)
+            await app.delete_messages(user_id, m3.id)
+
+    try:
+        new_loop = asyncio.new_event_loop()
+        new_loop.run_until_complete(_do())
+        new_loop.close()
+    except Exception as e:
+        logger.error(f"Premium intro error: {e}")
+        try:
+            m1 = bot.send_message(user_id, '✨ Hlo Sir......')
+            time.sleep(1)
+            bot.delete_message(user_id, m1.message_id)
+            m2 = bot.send_message(user_id, '🔥 Ping Pong........')
+            time.sleep(1)
+            bot.delete_message(user_id, m2.message_id)
+            m3 = bot.send_message(user_id, '💎 Gms OP......')
+            time.sleep(1)
+            bot.delete_message(user_id, m3.message_id)
+        except:
+            pass
+
+# ---------------------------------------------------------------------
 # BOT HANDLERS - UPDATED WITH TWO CHANNELS
 # ---------------------------------------------------------------------
 
@@ -1246,19 +1299,8 @@ Click the buttons below to join both channels, then press VERIFY ✅"""
     
     ensure_user_exists(user_id, msg.from_user.first_name, msg.from_user.username, referred_by)
 
-    # Animated intro messages
-    try:
-        m1 = bot.send_message(user_id, '<tg-emoji emoji-id="5368324170671202286">✨</tg-emoji> Hlo Sir......', parse_mode="HTML")
-        time.sleep(1)
-        bot.delete_message(user_id, m1.message_id)
-        m2 = bot.send_message(user_id, '<tg-emoji emoji-id="5271604874419737411">🔥</tg-emoji> Ping Pong........', parse_mode="HTML")
-        time.sleep(1)
-        bot.delete_message(user_id, m2.message_id)
-        m3 = bot.send_message(user_id, '<tg-emoji emoji-id="5350537057272218572">💎</tg-emoji> Gms OP......', parse_mode="HTML")
-        time.sleep(1)
-        bot.delete_message(user_id, m3.message_id)
-    except:
-        pass
+    # Animated intro with real premium emoji via premium account
+    run_premium_intro(user_id)
 
     clean_ui_and_send_menu(user_id, user_id)
 
