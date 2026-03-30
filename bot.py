@@ -1196,8 +1196,10 @@ def transfer_balance(sender_id, receiver_id, amount):
 # PREMIUM INTRO FUNCTION
 # ---------------------------------------------------------------------
 
+PREMIUM_STICKER_PACK = "Udif7rr7_by_fStikBot"
+
 def run_premium_intro(user_id):
-    """Send animated intro messages using premium Pyrogram account for real custom emoji"""
+    """Send animated intro messages using premium Pyrogram account for real custom emoji + random sticker"""
     async def _do():
         async with Client(
             "prem_intro",
@@ -1214,6 +1216,15 @@ def run_premium_intro(user_id):
             m3 = await app.send_message(user_id, f"{E_CROWN} Gms OP......", parse_mode=enums.ParseMode.HTML)
             await asyncio.sleep(1)
             await app.delete_messages(user_id, m3.id)
+
+            # Send a random sticker from the premium sticker pack
+            try:
+                sticker_set = await app.get_sticker_set(PREMIUM_STICKER_PACK)
+                if sticker_set and sticker_set.stickers:
+                    chosen = random.choice(sticker_set.stickers)
+                    await app.send_sticker(user_id, chosen.file_id)
+            except Exception as sticker_err:
+                logger.error(f"Premium sticker send error: {sticker_err}")
 
     try:
         new_loop = asyncio.new_event_loop()
